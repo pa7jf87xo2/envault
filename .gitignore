@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+.Python
+.DS_Store
+dist/
+Desktop.ini
+.venv/
+build/
+.env
+*.log
+.ruff_cache/
+.coverage
+*.egg
