@@ -1,70 +1,85 @@
-"""Encryption and decryption utilities using age encryption via pyage/subprocess."""
+"""Low-level age encryption/decryption helpers."""
 
-import subprocess
+from __future__ import annotations
+
 import shutil
+import subprocess
 from pathlib import Path
 
 
-AGE_BINARY = "age"
-AGE_KEYGEN_BINARY = "age-keygen"
+class AgeNotFoundError(RuntimeError):
+    """Raised when the `age` binary cannot be found on PATH."""
 
 
-class AgeNotFoundError(Exception):
-    """Raised when the age binary is not found on PATH."""
+class EncryptionError(RuntimeError):
+    """Raised when age encryption fails."""
 
 
-class EncryptionError(Exception):
-    """Raised when encryption fails."""
+class DecryptionError(RuntimeError):
+    """Raised when age decryption fails."""
 
 
-class DecryptionError(Exception):
-    """Raised when decryption fails."""
-
-
-def _require_age() -> None:
-    """Ensure the age binary is available."""
-    if not shutil.which(AGE_BINARY):
+def _require_age() -> str:
+    """Return the path to the age binary or raise AgeNotFoundError."""
+    binary = shutil.which("age")
+    if binary is None:
         raise AgeNotFoundError(
-            "'age' binary not found. Install it from https://github.com/FiloSottile/age"
+            "'age' binary not found on PATH. Install it from https://github.com/FiloSottile/age"
         )
+    return binary
 
 
-def generate_keypair(output_path: Path) -> str:
-    """Generate a new age keypair, write private key to output_path, return public key."""
-    _require_age()
-    result = subprocess.run(
-        [AGE_KEYGEN_BINARY, "-o", str(output_path)],
-        capture_output=True,
-        text=True,
-    )
+def generate_keypair() -> tuple[str, str]:
+    """Generate a new age keypair.
+
+    Returns:
+        A (public_key, private_key) tuple of strings.
+
+    Raises:
+        AgeNotFoundError: If age-keygen is not installed.
+        EncryptionError: If key generation fails.
+    """
+    keygen = shutil.which("age-keygen")
+    if keygen is None:
+        raise AgeNotFoundError("'age-keygen' binary not found on PATH.")
+
+    result = subprocess.run([keygen], capture_output=True, text=True)
     if result.returncode != 0:
         raise EncryptionError(f"age-keygen failed: {result.stderr.strip()}")
-    # Public key is printed to stderr by age-keygen
-    for line in result.stderr.splitlines():
-        if line.startswith("Public key:"):
-            return line.split(":", 1)[1].strip()
-    raise EncryptionError("Could not parse public key from age-keygen output.")
+
+    private_key = ""
+    public_key = ""
+    for line in result.stdout.splitlines():
+        if line.startswith("AGE-SECRET-KEY"):
+            private_key = line.strip()
+        elif line.startswith("# public key:"):
+            public_key = line.split(":", 1)[1].strip()
+
+    if not private_key or not public_key:
+        raise EncryptionError("Could not parse age-keygen output.")
+
+    return public_key, private_key
 
 
-def encrypt_file(input_path: Path, output_path: Path, recipient_public_key: str) -> None:
-    """Encrypt input_path with the given age public key, writing to output_path."""
-    _require_age()
+def encrypt_file(src: str, recipient_pubkey: str, dest: str) -> None:
+    """Encrypt *src* for *recipient_pubkey* and write ciphertext to *dest*."""
+    age = _require_age()
     result = subprocess.run(
-        [AGE_BINARY, "-r", recipient_public_key, "-o", str(output_path), str(input_path)],
+        [age, "--recipient", recipient_pubkey, "--output", dest, src],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise EncryptionError(f"Encryption failed: {result.stderr.strip()}")
+        raise EncryptionError(f"age encryption failed: {result.stderr.strip()}")
 
 
-def decrypt_file(input_path: Path, output_path: Path, identity_path: Path) -> None:
-    """Decrypt input_path using the age identity file, writing plaintext to output_path."""
-    _require_age()
+def decrypt_file(src: str, identity_file: str, dest: str) -> None:
+    """Decrypt *src* using *identity_file* and write plaintext to *dest*."""
+    age = _require_age()
     result = subprocess.run(
-        [AGE_BINARY, "-d", "-i", str(identity_path), "-o", str(output_path), str(input_path)],
+        [age, "--decrypt", "--identity", identity_file, "--output", dest, src],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        raise DecryptionError(f"Decryption failed: {result.stderr.strip()}")
+        raise DecryptionError(f"age decryption failed: {result.stderr.strip()}")
