@@ -22,6 +22,19 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _parse_env_keys(env_text: str) -> list[str]:
+    """Extract variable names from a .env-formatted string.
+
+    Skips blank lines and comment lines (starting with ``#``).
+    """
+    keys = []
+    for line in env_text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            keys.append(stripped.split("=", 1)[0].strip())
+    return keys
+
+
 def checksum(vault_path: Path) -> str:
     """Return the SHA-256 checksum of *vault_path*.
 
@@ -65,10 +78,6 @@ def verify(vault_path: Path, identity_path: Path) -> dict:
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "checksum": digest, "keys": [], "error": str(exc)}
 
-    keys = [
-        line.split("=", 1)[0].strip()
-        for line in env_text.splitlines()
-        if line.strip() and not line.strip().startswith("#") and "=" in line
-    ]
+    keys = _parse_env_keys(env_text)
 
     return {"ok": True, "checksum": digest, "keys": keys, "error": None}
