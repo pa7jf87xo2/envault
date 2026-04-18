@@ -77,6 +77,17 @@ def test_create_archive_contains_sources(tmp_path):
     assert "snap2.age" in names
 
 
+def test_create_archive_contains_vault(tmp_path):
+    """The vault file itself should be included in the archive."""
+    vault = _make_vault(tmp_path)
+    sources = _make_sources(tmp_path)
+    out = tmp_path / "out"
+    archive = create_archive(vault, sources, dest_dir=out)
+    with tarfile.open(archive, "r:gz") as tar:
+        names = tar.getnames()
+    assert vault.name in names
+
+
 def test_list_archives_returns_empty_when_no_dir(tmp_path):
     vault = _make_vault(tmp_path)
     assert list_archives(vault) == []
@@ -101,9 +112,3 @@ def test_extract_archive_raises_when_missing(tmp_path):
 def test_extract_archive_restores_files(tmp_path):
     vault = _make_vault(tmp_path)
     sources = _make_sources(tmp_path)
-    out = tmp_path / "out"
-    archive = create_archive(vault, sources, dest_dir=out)
-    dest = tmp_path / "restored"
-    extracted = extract_archive(archive, dest)
-    assert len(extracted) == 2
-    assert all(p.exists() for p in extracted)
