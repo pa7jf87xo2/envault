@@ -56,6 +56,16 @@ def test_record_creates_parent_dirs(tmp_path):
     assert log.exists()
 
 
+def test_record_entry_is_valid_json(tmp_path):
+    """Each line written to the log must be valid, parseable JSON."""
+    log = tmp_path / "audit.log"
+    record("pack", vault=".envault", source=".env", log_path=log)
+    for line in log.read_text().splitlines():
+        if line.strip():
+            parsed = json.loads(line)  # raises if invalid
+            assert isinstance(parsed, dict)
+
+
 # ---------------------------------------------------------------------------
 # read_log
 # ---------------------------------------------------------------------------
@@ -98,4 +108,5 @@ def test_tail_log_returns_last_n(tmp_path):
 def test_tail_log_returns_all_when_fewer_than_n(tmp_path):
     log = tmp_path / "audit.log"
     record("init", log_path=log)
-    assert len(tail_log(n=50, log_path=log)) == 1
+    tail = tail_log(n=5, log_path=log)
+    assert len(tail) == 1
