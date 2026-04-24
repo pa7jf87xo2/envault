@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 import threading
 from pathlib import Path
 
@@ -89,17 +90,29 @@ def test_acquire_succeeds_after_lock_released(tmp_path: Path):
 
     def _hold_then_release():
         lp = acquire(v)
-        time_to_sleep = 0.15
-        import time
-        time.sleep(time_to_sleep)
+        time.sleep(0.15)
         lp.unlink()
 
     t = threading.Thread(target=_hold_then_release)
     t.start()
-    import time
     time.sleep(0.02)
     lp2 = acquire(v, timeout=1.0, poll=0.05)
     results.append(lp2.exists())
     lp2.unlink()
     t.join()
     assert results == [True]
+
+
+def test_release_raises_when_lock_owned_by_other_pid(tmp_path: Path):
+    """release() should raise LockError when the lock file contains a foreign PID."""
+    v = _make_vault(tmp_path)
+    lp = lock_path(v)
+    # Write a PID that is guaranteed not to be ours.
+    foreign_pid = os.getpid() + 1
+    lp.write_text(str(foreign_pid))
+    try:
+        with pytest.raises(LockError, match="not owner"):
+            release(v)
+    finally:
+        if lp.exists():
+            lp.unlink()
