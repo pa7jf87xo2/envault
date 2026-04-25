@@ -30,6 +30,20 @@ def _parse_env(text: str) -> Dict[str, str]:
     return env
 
 
+def list_placeholders(template_path: Path) -> list[str]:
+    """Return a sorted list of unique placeholder keys found in *template_path*.
+
+    Useful for inspecting which vault keys a template requires before rendering.
+
+    Raises :class:`TemplateError` if the template file does not exist.
+    """
+    if not template_path.exists():
+        raise TemplateError(f"Template not found: {template_path}")
+    template = template_path.read_text()
+    keys = {match.group(1) for match in _PLACEHOLDER.finditer(template)}
+    return sorted(keys)
+
+
 def render_template(
     template_path: Path,
     vault_path: Path,
